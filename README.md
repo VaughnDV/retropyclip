@@ -46,6 +46,18 @@ uv run retropyclip history
 On Ubuntu X11 install either `xclip` or `xsel`. On Wayland install `wl-clipboard`.
 A genuinely headless Pi needs neither; use `add`, `show`, `push`, and `pull`.
 
+After cloning on an Ubuntu desktop, future updates can be installed and the tray
+restarted with:
+
+```bash
+git pull --ff-only
+./ubuntu-update.sh
+```
+
+The updater installs a missing X11/Wayland clipboard utility through `apt`, refreshes
+the locked Python environment, runs `doctor`, and restarts only this checkout's tray
+process. Its diagnostic log is stored privately under `~/.local/state/retropyclip/`.
+
 ## Quick local use
 
 ```bash
