@@ -37,7 +37,7 @@ class MacOSClipboard(ClipboardAdapter):
         if not shutil.which("pbcopy") or not shutil.which("pbpaste"):
             raise ClipboardUnavailable("pbcopy and pbpaste are not available")
         try:
-            import AppKit  # type: ignore[import-not-found]
+            import AppKit
 
             self._appkit = AppKit
             self.supports_concealed_markers = True

@@ -75,6 +75,10 @@ module = ["googleapiclient.*", "google_auth_oauthlib.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+module = ["AppKit", "ApplicationServices", "Quartz"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = ["retropyclip.sync.auth"]
 disallow_untyped_calls = false
 warn_return_any = false
