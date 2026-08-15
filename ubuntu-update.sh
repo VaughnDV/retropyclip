@@ -6,6 +6,11 @@ project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/retropyclip"
 log_file="$state_dir/tray.log"
 tray_launcher="$project_dir/.venv/bin/retropyclip-tray"
+extension_uuid="retropyclip@vaughndv.github.io"
+extension_source="$project_dir/packaging/gnome-shell-extension"
+extension_target="${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/$extension_uuid"
+gnome_bridge=false
+gnome_restart_required=false
 
 if [[ "$(uname -s)" != "Linux" ]]; then
     echo "This updater is intended for Linux."
@@ -28,8 +33,7 @@ case "$session_type" in
             sudo apt-get install -y wl-clipboard
         fi
         if [[ "$desktop_name" == *GNOME* || "$desktop_name" == *ubuntu* ]]; then
-            echo "Note: GNOME Wayland may block global clipboard watching."
-            echo "RetroPyClip will stay quiet instead of using visible fallback polling."
+            gnome_bridge=true
         fi
         ;;
     x11)
@@ -43,6 +47,36 @@ case "$session_type" in
         echo "Warning: XDG_SESSION_TYPE is '$session_type'; desktop clipboard support may be unavailable."
         ;;
 esac
+
+if [[ "$gnome_bridge" == true ]]; then
+    echo "Installing the RetroPyClip GNOME clipboard bridge…"
+    install -d -m 700 "$extension_target"
+    install -m 600 "$extension_source/extension.js" "$extension_target/extension.js"
+    install -m 600 "$extension_source/metadata.json" "$extension_target/metadata.json"
+
+    enabled_extensions="$(python3 - "$extension_uuid" "$(gsettings get org.gnome.shell enabled-extensions)" <<'PY'
+import ast
+import sys
+
+uuid = sys.argv[1]
+raw = sys.argv[2]
+if raw.startswith("@as "):
+    raw = raw[4:]
+enabled = ast.literal_eval(raw)
+if uuid not in enabled:
+    enabled.append(uuid)
+print(repr(enabled))
+PY
+    )"
+    gsettings set org.gnome.shell enabled-extensions "$enabled_extensions"
+    if gnome-extensions info "$extension_uuid" >/dev/null 2>&1; then
+        gnome-extensions disable "$extension_uuid" >/dev/null 2>&1 || true
+        gnome-extensions enable "$extension_uuid" >/dev/null 2>&1 || true
+    fi
+    if ! gnome-extensions list --active 2>/dev/null | grep -Fxq "$extension_uuid"; then
+        gnome_restart_required=true
+    fi
+fi
 
 cd "$project_dir"
 echo "Updating the RetroPyClip environment…"
@@ -76,6 +110,12 @@ for _ in {1..50}; do
     if pgrep -f -- "$tray_launcher" >/dev/null 2>&1; then
         echo "RetroPyClip is updated and running."
         echo "Diagnostic log: $log_file"
+        if [[ "$gnome_restart_required" == true ]]; then
+            echo
+            echo "One-time GNOME step required: log out and back in, then run ./ubuntu-update.sh again."
+        elif [[ "$gnome_bridge" == true ]]; then
+            echo "GNOME clipboard bridge: active"
+        fi
         exit 0
     fi
     sleep 0.1

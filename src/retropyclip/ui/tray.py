@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import platform
 import signal
 import subprocess
@@ -41,6 +42,7 @@ from retropyclip.platforms.clipboard import (
 from retropyclip.runtime import Runtime
 from retropyclip.sync.backend import AuthenticationRequired, BackendError
 from retropyclip.sync.engine import SyncDisabled
+from retropyclip.ui.gnome_clipboard_bridge import GnomeClipboardBridge
 from retropyclip.ui.history_popup import HistoryPopup
 from retropyclip.ui.macos_hotkey import GlobalHotKeyError, MacOSHistoryHotKey
 from retropyclip.ui.macos_paste import MacOSPasteTarget, PastePreparation
@@ -112,11 +114,18 @@ class TrayController(QObject):
             self.native_clipboard = detect_clipboard()
         self._last_observed_clipboard_text = self._read_current_clipboard()
         self.wayland_watcher: WaylandClipboardWatcher | None = None
+        self.gnome_clipboard_bridge: GnomeClipboardBridge | None = None
         if isinstance(self.native_clipboard, WaylandClipboard):
-            watcher = WaylandClipboardWatcher()
-            with suppress(ClipboardUnavailable):
-                watcher.start()
-                self.wayland_watcher = watcher
+            desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
+            if "gnome" in desktop:
+                bridge = GnomeClipboardBridge(self._capture_text, self)
+                if bridge.available:
+                    self.gnome_clipboard_bridge = bridge
+            else:
+                watcher = WaylandClipboardWatcher()
+                with suppress(ClipboardUnavailable):
+                    watcher.start()
+                    self.wayland_watcher = watcher
 
         self.tray = QSystemTrayIcon(self._icon("idle"), self)
         self.tray.setToolTip("RetroPyClip — local clipboard history")
@@ -474,6 +483,8 @@ class TrayController(QObject):
             self.history_hotkey.close()
         if self.wayland_watcher is not None:
             self.wayland_watcher.close()
+        if self.gnome_clipboard_bridge is not None:
+            self.gnome_clipboard_bridge.close()
         self.history_popup.close()
         self.menu.close()
         self.tray.setContextMenu(None)

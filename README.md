@@ -46,12 +46,13 @@ uv run retropyclip history
 On Ubuntu X11 install either `xclip` or `xsel`. On Wayland install `wl-clipboard`.
 A genuinely headless Pi needs neither; use `add`, `show`, `push`, and `pull`.
 
-Wayland clipboard watching uses the compositor's data-control protocol. It works on
-compositors that expose that protocol, such as Sway and Hyprland. Standard Ubuntu
-GNOME Wayland does not expose it to ordinary applications; use an **Ubuntu on Xorg**
-login session for reliable global history capture. RetroPyClip never repeatedly
-polls `wl-paste`, because its fallback window can visibly flash on unsupported
-compositors.
+Wayland clipboard watching uses the compositor's data-control protocol on desktops
+such as Sway and Hyprland. Standard Ubuntu GNOME Wayland does not expose that
+protocol to ordinary applications, so `ubuntu-update.sh` installs a small bundled
+GNOME Shell bridge that forwards text to the local RetroPyClip process over the
+private desktop session bus. The first installation may ask for one logout/login to
+load the extension. RetroPyClip never repeatedly polls `wl-paste`, because its
+fallback window can visibly flash on unsupported compositors.
 
 After cloning on an Ubuntu desktop, future updates can be installed and the tray
 restarted with:
