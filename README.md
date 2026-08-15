@@ -1,0 +1,121 @@
+# RetroPyClip
+
+RetroPyClip is a private-first, text-only clipboard history application for macOS,
+Ubuntu, and Raspberry Pi. It stores history locally in SQLite and can synchronize
+encrypted immutable records through the user's private Google Drive app-data area.
+There is no RetroPyClip-operated server.
+
+> **Prototype warning:** Clipboard history often contains passwords, access tokens,
+> personal data, and source code. Review the threat model before using this build
+> with real data. Local history is not encrypted by the application; use FileVault
+> or LUKS.
+
+## What works in this MVP
+
+- Local text-only clipboard history with deterministic ordering and a configurable
+  120-item default retention limit.
+- Immediate duplicate suppression, pause/resume, exact copy/show, JSON and text
+  export/import, local clearing, and tombstone-based "clear everywhere".
+- AES-256-GCM record encryption with an Argon2id passphrase-derived key.
+- Immutable one-file-per-record synchronization through Google Drive
+  `appDataFolder`, including offline-safe retry and remote deduplication.
+- The same Typer CLI on every platform.
+- Clipboard adapters for macOS (`pbcopy`/`pbpaste`), X11 (`xclip` or `xsel`),
+  Wayland (`wl-copy`/`wl-paste`), and a headless CLI workflow.
+- An optional PySide6 tray application with grouped history and retro pixel icons.
+
+## Install for development
+
+Python 3.12 or newer and `uv` are recommended:
+
+```bash
+cd /path/to/retropyclip
+uv sync --all-extras
+uv run retropyclip doctor
+uv run pytest
+```
+
+For a smaller headless installation, omit `--all-extras`:
+
+```bash
+uv sync
+uv run retropyclip add "hello from this device"
+uv run retropyclip history
+```
+
+On Ubuntu X11 install either `xclip` or `xsel`. On Wayland install `wl-clipboard`.
+A genuinely headless Pi needs neither; use `add`, `show`, `push`, and `pull`.
+
+## Quick local use
+
+```bash
+retropyclip add "hello"
+printf 'piped text' | retropyclip add
+retropyclip history
+retropyclip show ITEM_ID
+retropyclip copy ITEM_ID
+retropyclip daemon
+```
+
+`daemon` watches the desktop clipboard and records text changes until interrupted.
+It never captures images or files. Use `retropyclip pause --minutes 5` before
+handling known-sensitive material.
+
+## Enable Google Drive sync
+
+Real Drive sync requires an OAuth client that you create in your own Google Cloud
+project. Follow [docs/google-oauth-setup.md](docs/google-oauth-setup.md), then:
+
+```bash
+retropyclip login --client-secrets /safe/path/client_secret.json
+retropyclip sync
+```
+
+The first sync asks for a sync passphrase and creates non-secret Argon2id key
+metadata in `appDataFolder`. Enter the same passphrase on every device. The
+passphrase and derived key are never uploaded. For unattended use, provide the
+passphrase through `RETROPYCLIP_SYNC_PASSPHRASE`; understand that environment
+variables can be exposed to other processes owned by the same user.
+
+Run `retropyclip status` for local state and authentication readiness. Downloaded
+clips enter history but never replace the current clipboard automatically.
+
+## Optional tray app
+
+```bash
+uv sync --extra gui
+uv run retropyclip-tray
+```
+
+The tray menu includes grouped history, Sync Now, pause controls, clearing, and
+preferences. On macOS, `Cmd+Shift+V` opens a compact retro history console from any
+application. Type to filter, use Up/Down to browse, then press Enter or click an item
+to paste the exact plain text back into the application you were using. Escape closes
+the window, and pressing the shortcut again toggles it.
+
+The shortcut itself uses native macOS hotkey registration and does not need extra
+access. Automatic paste does: the first selection asks for Accessibility permission.
+Open **System Settings → Privacy & Security → Accessibility** and enable
+RetroPyClip. During development, macOS may list it as Python or the terminal app that
+launched it (for example, Warp). If the picker was already running, restart it after
+granting access. A selection is still copied to the clipboard when permission is not
+available, so regular `Cmd+V` remains a fallback.
+
+Packaging, signing, notarisation, launch-at-login, configurable shortcuts, and a
+Linux-wide shortcut implementation remain release work rather than prototype claims.
+
+## Data locations
+
+Platform-standard user data and configuration locations are selected with
+`platformdirs`. For isolated testing, set `RETROPYCLIP_HOME` to a directory. OAuth
+tokens use the OS keyring when available and fall back to a mode-`0600` file.
+
+Do not commit OAuth client files, token files, databases, logs, or recovery material.
+
+## Project status
+
+This repository implements the Stage 1 sync core plus an early Stage 2/3 tray and
+daemon experience. Before public release, complete the feasibility matrix on real
+Mac, Ubuntu, and Pi hardware; add signed/notarised packages; choose a cleared final
+name; and perform a focused security review. Use the exact
+[real-device feasibility checklist](docs/feasibility-checklist.md) to record that gate.
