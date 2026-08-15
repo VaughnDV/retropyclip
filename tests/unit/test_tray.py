@@ -43,14 +43,14 @@ def test_tray_builds_history_actions(tmp_path: Path, monkeypatch: pytest.MonkeyP
     class FakeLinuxClipboard:
         def __init__(self) -> None:
             self.written: list[str] = []
+            self.current: str | None = None
 
         @staticmethod
         def is_concealed() -> bool:
             return False
 
-        @staticmethod
-        def read_text() -> None:
-            return None
+        def read_text(self) -> str | None:
+            return self.current
 
         def set_text(self, text: str) -> None:
             self.written.append(text)
@@ -84,6 +84,15 @@ def test_tray_builds_history_actions(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert application.clipboard().text() == "saved item"
     assert not controller.history_popup.isVisible()
 
+    linux_clipboard.current = "copied manually in another Wayland app"
+    controller._last_observed_clipboard_text = "saved item"
+    controller._capture_current_clipboard()
+    assert (
+        controller.runtime.repository.list_history(limit=1)[0].record.text
+        == "copied manually in another Wayland app"
+    )
+
+    linux_clipboard.current = None
     application.clipboard().dataChanged.disconnect(controller._clipboard_changed)
     application.clipboard().setText("externally copied item")
     QTest.qWait(300)

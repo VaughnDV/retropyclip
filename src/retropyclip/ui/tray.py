@@ -240,6 +240,15 @@ class TrayController(QObject):
     def _read_current_clipboard(self) -> str | None:
         if self.native_clipboard is not None and self.native_clipboard.is_concealed():
             return None
+        if platform.system() == "Linux" and self.native_clipboard is not None:
+            try:
+                # Qt's Wayland clipboard view can stay stale when another app
+                # becomes the selection owner. Poll wl-paste/xclip directly.
+                native_text = self.native_clipboard.read_text()
+                if native_text is not None:
+                    return native_text
+            except (ClipboardUnavailable, OSError, subprocess.SubprocessError):
+                pass
         clipboard = self.application.clipboard()
         mime = clipboard.mimeData()
         if not mime or not mime.hasText():
