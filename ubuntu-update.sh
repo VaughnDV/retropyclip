@@ -18,12 +18,18 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 session_type="${XDG_SESSION_TYPE:-unknown}"
+desktop_name="${XDG_CURRENT_DESKTOP:-unknown}"
+echo "Desktop session: $desktop_name ($session_type)"
 case "$session_type" in
     wayland)
         if ! command -v wl-copy >/dev/null 2>&1 || ! command -v wl-paste >/dev/null 2>&1; then
             echo "Installing the Wayland clipboard utility…"
             sudo apt-get update
             sudo apt-get install -y wl-clipboard
+        fi
+        if [[ "$desktop_name" == *GNOME* || "$desktop_name" == *ubuntu* ]]; then
+            echo "Note: GNOME Wayland may block global clipboard watching."
+            echo "RetroPyClip will stay quiet instead of using visible fallback polling."
         fi
         ;;
     x11)
