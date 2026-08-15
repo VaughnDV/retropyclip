@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import platform
 import signal
+import subprocess
 import sys
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import suppress
@@ -274,6 +275,18 @@ class TrayController(QObject):
     def _copy_text(self, text: str) -> None:
         self.runtime.repository.set_clipboard_suppression(text)
         self.application.clipboard().setText(text)
+        if platform.system() == "Linux" and self.native_clipboard is not None:
+            try:
+                # On Wayland and X11 the process that owns the selection matters.
+                # Let wl-copy/xclip become the final owner; Qt remains a fallback.
+                self.native_clipboard.set_text(text)
+            except (ClipboardUnavailable, OSError, subprocess.SubprocessError) as error:
+                self.tray.showMessage(
+                    "Clipboard fallback in use",
+                    f"The native Linux clipboard utility failed: {error}",
+                    QSystemTrayIcon.Warning,
+                    6000,
+                )
 
     def _select_history_text(self, text: str) -> None:
         self._copy_text(text)

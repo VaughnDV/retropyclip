@@ -40,6 +40,28 @@ def test_tray_builds_history_actions(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert group is not None
     assert group.actions()[0].text() == "saved item"
 
+    class FakeLinuxClipboard:
+        def __init__(self) -> None:
+            self.written: list[str] = []
+
+        @staticmethod
+        def is_concealed() -> bool:
+            return False
+
+        @staticmethod
+        def read_text() -> None:
+            return None
+
+        def set_text(self, text: str) -> None:
+            self.written.append(text)
+
+    linux_clipboard = FakeLinuxClipboard()
+    controller.native_clipboard = linux_clipboard  # type: ignore[assignment]
+    monkeypatch.setattr("retropyclip.ui.tray.platform.system", lambda: "Linux")
+    group.actions()[0].trigger()
+    assert application.clipboard().text() == "saved item"
+    assert linux_clipboard.written == ["saved item"]
+
     controller._toggle_history()
     assert controller.history_popup.isVisible()
     assert controller.history_popup.list.count() == 1
