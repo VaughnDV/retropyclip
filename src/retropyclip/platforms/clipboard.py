@@ -3,11 +3,15 @@ from __future__ import annotations
 import os
 import platform
 import shutil
+import struct
 import subprocess
+import sys
 import threading
 from abc import ABC, abstractmethod
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import BinaryIO
 
 
 class ClipboardUnavailable(RuntimeError):
@@ -84,7 +88,7 @@ class WaylandClipboard(ClipboardAdapter):
 
     def read_text(self) -> str | None:
         result = subprocess.run(
-            ["wl-paste", "--type", "text/plain"],
+            ["wl-paste", "--type", "text"],
             check=False,
             capture_output=True,
             timeout=3,
@@ -106,6 +110,118 @@ class WaylandClipboard(ClipboardAdapter):
         )
         if result.returncode != 0:
             raise ClipboardUnavailable("Wayland compositor rejected clipboard text")
+
+
+class WaylandClipboardWatcher:
+    """Receive clipboard changes from one persistent wl-paste process."""
+
+    _header = struct.Struct("!Q")
+    _maximum_frame_bytes = 1024 * 1024
+
+    def __init__(self) -> None:
+        self._process: subprocess.Popen[bytes] | None = None
+        self._thread: threading.Thread | None = None
+        self._pending: deque[str] = deque()
+        self._lock = threading.Lock()
+
+    def start(self) -> None:
+        if self.is_running():
+            return
+        if not shutil.which("wl-paste"):
+            raise ClipboardUnavailable("install wl-clipboard for Wayland clipboard watching")
+        command = [
+            "wl-paste",
+            "--type",
+            "text",
+            "--watch",
+            sys.executable,
+            "-m",
+            "retropyclip.platforms.wayland_watch_frame",
+        ]
+        try:
+            self._process = subprocess.Popen(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                bufsize=0,
+            )
+        except OSError as error:
+            raise ClipboardUnavailable("could not start the Wayland clipboard watcher") from error
+        assert self._process.stdout is not None
+        self._thread = threading.Thread(
+            target=self._consume,
+            args=(self._process.stdout,),
+            name="retropyclip-wayland-watch",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def is_running(self) -> bool:
+        return self._process is not None and self._process.poll() is None
+
+    def take_pending(self) -> list[str]:
+        with self._lock:
+            values = list(self._pending)
+            self._pending.clear()
+        return values
+
+    def close(self) -> None:
+        process = self._process
+        if process is None:
+            return
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=2)
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+        self._process = None
+        self._thread = None
+
+    def _consume(self, stream: BinaryIO) -> None:
+        while True:
+            header = self._read_exact(stream, self._header.size)
+            if header is None:
+                return
+            size = self._header.unpack(header)[0]
+            if size > self._maximum_frame_bytes:
+                if not self._discard(stream, size):
+                    return
+                continue
+            payload = self._read_exact(stream, size)
+            if payload is None:
+                return
+            try:
+                text = payload.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+            with self._lock:
+                self._pending.append(text)
+
+    @staticmethod
+    def _read_exact(stream: BinaryIO, size: int) -> bytes | None:
+        chunks: list[bytes] = []
+        remaining = size
+        while remaining:
+            chunk = stream.read(remaining)
+            if not chunk:
+                return None
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return b"".join(chunks)
+
+    @staticmethod
+    def _discard(stream: BinaryIO, size: int) -> bool:
+        remaining = size
+        while remaining:
+            chunk = stream.read(min(remaining, 65_536))
+            if not chunk:
+                return False
+            remaining -= len(chunk)
+        return True
 
 
 class X11Clipboard(ClipboardAdapter):

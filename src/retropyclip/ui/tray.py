@@ -32,7 +32,12 @@ from retropyclip.config import AppPaths
 from retropyclip.core.models import SyncReport, format_utc
 from retropyclip.core.text import InvalidClip, one_line_preview
 from retropyclip.crypto.envelope import MIN_PASSPHRASE_LENGTH, CryptoError
-from retropyclip.platforms.clipboard import ClipboardUnavailable, detect_clipboard
+from retropyclip.platforms.clipboard import (
+    ClipboardUnavailable,
+    WaylandClipboard,
+    WaylandClipboardWatcher,
+    detect_clipboard,
+)
 from retropyclip.runtime import Runtime
 from retropyclip.sync.backend import AuthenticationRequired, BackendError
 from retropyclip.sync.engine import SyncDisabled
@@ -106,6 +111,12 @@ class TrayController(QObject):
         with suppress(ClipboardUnavailable):
             self.native_clipboard = detect_clipboard()
         self._last_observed_clipboard_text = self._read_current_clipboard()
+        self.wayland_watcher: WaylandClipboardWatcher | None = None
+        if isinstance(self.native_clipboard, WaylandClipboard):
+            watcher = WaylandClipboardWatcher()
+            with suppress(ClipboardUnavailable):
+                watcher.start()
+                self.wayland_watcher = watcher
 
         self.tray = QSystemTrayIcon(self._icon("idle"), self)
         self.tray.setToolTip("RetroPyClip — local clipboard history")
@@ -240,27 +251,29 @@ class TrayController(QObject):
     def _read_current_clipboard(self) -> str | None:
         if self.native_clipboard is not None and self.native_clipboard.is_concealed():
             return None
-        if platform.system() == "Linux" and self.native_clipboard is not None:
-            try:
-                # Qt's Wayland clipboard view can stay stale when another app
-                # becomes the selection owner. Poll wl-paste/xclip directly.
-                native_text = self.native_clipboard.read_text()
-                if native_text is not None:
-                    return native_text
-            except (ClipboardUnavailable, OSError, subprocess.SubprocessError):
-                pass
         clipboard = self.application.clipboard()
         mime = clipboard.mimeData()
         if not mime or not mime.hasText():
             return None
         text = clipboard.text()
-        if not text and self.native_clipboard is not None:
+        if (
+            not text
+            and self.native_clipboard is not None
+            and not isinstance(self.native_clipboard, WaylandClipboard)
+        ):
             with suppress(ClipboardUnavailable):
                 return self.native_clipboard.read_text()
         return text
 
     def _capture_current_clipboard(self) -> None:
+        if self.wayland_watcher is not None and self.wayland_watcher.is_running():
+            for text in self.wayland_watcher.take_pending():
+                self._capture_text(text)
+            return
         text = self._read_current_clipboard()
+        self._capture_text(text)
+
+    def _capture_text(self, text: str | None) -> None:
         if not self.runtime.capture_enabled():
             self._last_observed_clipboard_text = text
             return
@@ -459,6 +472,8 @@ class TrayController(QObject):
         self.refresh_timer.stop()
         if self.history_hotkey is not None:
             self.history_hotkey.close()
+        if self.wayland_watcher is not None:
+            self.wayland_watcher.close()
         self.history_popup.close()
         self.menu.close()
         self.tray.setContextMenu(None)

@@ -13,6 +13,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from retropyclip.crypto.envelope import MIN_PASSPHRASE_LENGTH
+from retropyclip.platforms.clipboard import WaylandClipboard
 from retropyclip.runtime import Runtime
 from retropyclip.ui.macos_paste import MacOSPasteTarget, PastePreparation
 from retropyclip.ui.tray import TrayController
@@ -43,14 +44,13 @@ def test_tray_builds_history_actions(tmp_path: Path, monkeypatch: pytest.MonkeyP
     class FakeLinuxClipboard:
         def __init__(self) -> None:
             self.written: list[str] = []
-            self.current: str | None = None
 
         @staticmethod
         def is_concealed() -> bool:
             return False
 
         def read_text(self) -> str | None:
-            return self.current
+            return None
 
         def set_text(self, text: str) -> None:
             self.written.append(text)
@@ -84,7 +84,24 @@ def test_tray_builds_history_actions(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert application.clipboard().text() == "saved item"
     assert not controller.history_popup.isVisible()
 
-    linux_clipboard.current = "copied manually in another Wayland app"
+    class FakeWaylandWatcher:
+        def __init__(self) -> None:
+            self.pending = ["copied manually in another Wayland app"]
+
+        @staticmethod
+        def is_running() -> bool:
+            return True
+
+        def take_pending(self) -> list[str]:
+            pending = self.pending
+            self.pending = []
+            return pending
+
+        @staticmethod
+        def close() -> None:
+            return None
+
+    controller.wayland_watcher = FakeWaylandWatcher()  # type: ignore[assignment]
     controller._last_observed_clipboard_text = "saved item"
     controller._capture_current_clipboard()
     assert (
@@ -92,8 +109,21 @@ def test_tray_builds_history_actions(tmp_path: Path, monkeypatch: pytest.MonkeyP
         == "copied manually in another Wayland app"
     )
 
-    linux_clipboard.current = None
+    controller.wayland_watcher = None
     application.clipboard().dataChanged.disconnect(controller._clipboard_changed)
+
+    class NoPollingWaylandClipboard(WaylandClipboard):
+        def __init__(self) -> None:
+            pass
+
+        def read_text(self) -> str | None:
+            pytest.fail("Wayland clipboard reads must not be polled")
+
+    controller.native_clipboard = NoPollingWaylandClipboard()
+    application.clipboard().clear()
+    assert controller._read_current_clipboard() is None
+
+    controller.native_clipboard = linux_clipboard  # type: ignore[assignment]
     application.clipboard().setText("externally copied item")
     QTest.qWait(300)
     assert controller.runtime.repository.list_history(limit=1)[0].record.text == "externally copied item"
