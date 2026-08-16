@@ -17,3 +17,6 @@ credentials*.json
 token*.json
 recovery*.txt
 *.log
+
+# Local handover and scratch work
+/tmp/

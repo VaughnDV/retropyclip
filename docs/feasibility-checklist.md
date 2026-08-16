@@ -50,3 +50,5 @@ on one device first, then connect the others with the same passphrase.
 Record results, OS versions, desktop session, CPU architecture, Python version, and
 OAuth client type. A failure here is a go/no-go result; fix it before signing or
 notarising a GUI build.
+
+Dated synthetic results live in [compatibility-matrix.md](compatibility-matrix.md).

@@ -15,10 +15,12 @@ ID, record kind, file size, upload time, KDF salt, and rough activity volume rem
 visible to Google. The passphrase must be strong enough to resist offline guessing.
 
 The local machine is trusted while the user session is unlocked. RetroPyClip's
-SQLite database deliberately stores plaintext for fast local operation. FileVault
-or LUKS is required for local at-rest protection. Malware running as the user,
-screen readers with excessive access, clipboard snoopers, debuggers, and physical
-access to an unlocked device are outside the encryption boundary.
+SQLite database deliberately stores plaintext for fast local operation. This is a
+documented product decision, not a missing feature: see
+[at-rest-encryption.md](at-rest-encryption.md). FileVault or LUKS is required for
+local at-rest protection. Malware running as the user, screen readers with
+excessive access, clipboard snoopers, debuggers, and physical access to an
+unlocked device are outside the encryption boundary.
 
 ## Main risks and mitigations
 

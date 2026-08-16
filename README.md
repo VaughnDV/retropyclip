@@ -6,9 +6,13 @@ encrypted immutable records through the user's private Google Drive app-data are
 There is no RetroPyClip-operated server.
 
 > **Prototype warning:** Clipboard history often contains passwords, access tokens,
-> personal data, and source code. Review the threat model before using this build
-> with real data. Local history is not encrypted by the application; use FileVault
-> or LUKS.
+> personal data, and source code. Review the [threat model](docs/threat-model.md)
+> before using this build with real data.
+>
+> **Local history is not application-encrypted.** The SQLite database is plaintext
+> by design so search and the tray can run in an unlocked session. Use FileVault
+> or LUKS. Remote Drive records *are* AES-256-GCM encrypted. See
+> [at-rest-encryption.md](docs/at-rest-encryption.md).
 
 ## What works in this MVP
 
@@ -135,7 +139,11 @@ Do not commit OAuth client files, token files, databases, logs, or recovery mate
 ## Project status
 
 This repository implements the Stage 1 sync core plus an early Stage 2/3 tray and
-daemon experience. Before public release, complete the feasibility matrix on real
-Mac, Ubuntu, and Pi hardware; add signed/notarised packages; choose a cleared final
-name; and perform a focused security review. Use the exact
-[real-device feasibility checklist](docs/feasibility-checklist.md) to record that gate.
+daemon experience. Public-release notes:
+
+- Name clearance: [docs/name-clearance.md](docs/name-clearance.md)
+- Secret scan: [docs/secret-scan.md](docs/secret-scan.md)
+- Security review: [docs/security-review.md](docs/security-review.md)
+- Licence audit: [docs/license-audit.md](docs/license-audit.md)
+- Compatibility matrix: [docs/compatibility-matrix.md](docs/compatibility-matrix.md)
+- Real-device checklist: [docs/feasibility-checklist.md](docs/feasibility-checklist.md)
