@@ -1,77 +1,92 @@
+<div align="center">
+
 # RetroPyClip
 
-RetroPyClip is a private-first, text-only clipboard history application for macOS,
-Ubuntu, and Raspberry Pi. It stores history locally in SQLite and can synchronize
-encrypted immutable records through the user's private Google Drive app-data area.
-There is no RetroPyClip-operated server.
+Private-first, text-only clipboard history for macOS and Linux.
+Local SQLite on your machine. Optional AES-256-GCM sync through *your*
+Google Drive `appDataFolder`. No RetroPyClip-operated server.
 
-> **Prototype warning:** Clipboard history often contains passwords, access tokens,
-> personal data, and source code. Review the [threat model](docs/threat-model.md)
-> before using this build with real data.
+[![CI](https://github.com/VaughnDV/retropyclip/actions/workflows/ci.yml/badge.svg)](https://github.com/VaughnDV/retropyclip/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%20%7C%203.13-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![uv](https://img.shields.io/badge/managed%20with-uv-DE5FE9)](https://docs.astral.sh/uv/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Checked with mypy](https://www.mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)
+[![status](https://img.shields.io/badge/status-alpha-yellow)](CHANGELOG.md)
+
+<img src="docs/assets/history-console.png" alt="RetroPyClip history console showing synthetic demo clips" width="720">
+
+<sub>Synthetic demo data only. Capture, filter, and copy stay local.</sub>
+
+[Features](#features) ·
+[Quick start](#quick-start) ·
+[CLI](#cli) ·
+[Tray](#optional-tray) ·
+[Sync](#google-drive-sync) ·
+[Security](#security) ·
+[Development](#development)
+
+</div>
+
+> **Prototype.** Clipboard history often contains passwords, tokens, and personal
+> data. Read the [threat model](docs/threat-model.md) before using this with real
+> clips.
 >
 > **Local history is not application-encrypted.** The SQLite database is plaintext
-> by design so search and the tray can run in an unlocked session. Use FileVault
-> or LUKS. Remote Drive records *are* AES-256-GCM encrypted. See
-> [at-rest-encryption.md](docs/at-rest-encryption.md).
+> so search and the tray can run in an unlocked session. Use FileVault or LUKS.
+> Remote Drive records *are* AES-256-GCM. See
+> [at-rest encryption](docs/at-rest-encryption.md).
 
-![RetroPyClip history console](docs/assets/history-console.png)
+<p align="center">
+  <img src="docs/assets/demo-flow.svg" alt="Capture, search, encrypt, then merge after sync" width="720">
+</p>
 
-Capture, filter, and copy are local. Encrypted sync is optional and uses your Drive
-app-data folder. A 30–60 second recording of `make demo` is the preferred motion
-asset; the screenshot above is synthetic demo data only. The four-step storyboard
-is [docs/assets/demo-flow.svg](docs/assets/demo-flow.svg). Record `make demo` for a
-live 30–60 second GIF before a public launch.
+## Features
 
-## Architecture
-
-Clipboard adapters, the SQLite repository, the AES-GCM envelope, Drive transport,
-and the CLI/tray are separate. See [docs/architecture.md](docs/architecture.md)
-and the Staff-level note on a [serverless Drive data plane](docs/drive-data-plane.md).
-
-## Security properties / not protected against
-
-| Protected | Not protected against |
+| Local | Optional sync |
 |---|---|
-| Clip plaintext on Drive, given a strong passphrase | Weak passphrases |
-| Authenticated remote records | Drive deletion or replay |
-| Concurrent-device merge and tombstones | Clock skew in display order |
-| Keyring / `0600` token files | Malware in an unlocked user session |
-| Pause and text-only capture | Secrets that look like ordinary text |
-| Isolated demo homes | Local DB without FileVault or LUKS |
+| Text-only capture (never images or files) | AES-256-GCM envelopes, Argon2id wrapping |
+| 120-item default retention, deterministic order | Immutable one-file-per-record in Drive `appDataFolder` |
+| Immediate duplicate suppression | Offline-safe retry and remote deduplication |
+| Pause / resume before handling secrets | Concurrent-device merge with tombstones |
+| JSON and text export / import | Same passphrase on every device; key never uploaded |
+| Headless CLI on every supported platform | No RetroPyClip account, telemetry, or hosted backend |
 
-Full model: [docs/threat-model.md](docs/threat-model.md). Privacy: there is no
-operated server or telemetry ([docs/privacy.md](docs/privacy.md)).
+Clipboard adapters: macOS (`pbcopy` / `pbpaste`), X11 (`xclip` or `xsel`), Wayland
+(`wl-copy` / `wl-paste`), plus a GNOME Shell bridge where the compositor does not
+expose data-control. Architecture:
+[docs/architecture.md](docs/architecture.md).
 
-## What works in this MVP
+## Requirements
 
-- Local text-only clipboard history with deterministic ordering and a configurable
-  120-item default retention limit.
-- Immediate duplicate suppression, pause/resume, exact copy/show, JSON and text
-  export/import, local clearing, and tombstone-based "clear everywhere".
-- AES-256-GCM record encryption with an Argon2id passphrase-derived key.
-- Immutable one-file-per-record synchronization through Google Drive
-  `appDataFolder`, including offline-safe retry and remote deduplication.
-- The same Typer CLI on every platform.
-- Clipboard adapters for macOS (`pbcopy`/`pbpaste`), X11 (`xclip` or `xsel`),
-  Wayland (`wl-copy`/`wl-paste`), and a headless CLI workflow.
-- An optional PySide6 tray application with grouped history and retro pixel icons.
+| | |
+|---|---|
+| Python | 3.12 or 3.13 |
+| Tooling | [`uv`](https://docs.astral.sh/uv/) (recommended) |
+| macOS | Clipboard tools are built in |
+| Ubuntu X11 | `xclip` or `xsel` |
+| Ubuntu Wayland | `wl-clipboard`; GNOME needs the bundled Shell bridge |
+| Headless Pi | No clipboard utility; use `add`, `show`, `push`, `pull` |
+| Disk encryption | FileVault or LUKS for the local database |
 
-## Install for development
+Windows is not supported.
 
-Python 3.12 or newer and `uv` are recommended:
+## Quick start
 
 ```bash
-cd /path/to/retropyclip
+git clone https://github.com/VaughnDV/retropyclip.git
+cd retropyclip
 uv sync --all-extras
 uv run retropyclip doctor
-make check
-make test
 ```
 
-`make check`, `make test`, `make package`, `make audit`, and `make demo` wrap the
-same `uv` commands. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Safe synthetic walkthrough (isolated `RETROPYCLIP_HOME`, no real OAuth):
 
-For a smaller headless installation, omit `--all-extras`:
+```bash
+make demo
+```
+
+Headless install without the tray extra:
 
 ```bash
 uv sync
@@ -79,30 +94,32 @@ uv run retropyclip add "hello from this device"
 uv run retropyclip history
 ```
 
+<details>
+<summary>Ubuntu desktop updates and clipboard helpers</summary>
+
 On Ubuntu X11 install either `xclip` or `xsel`. On Wayland install `wl-clipboard`.
-A genuinely headless Pi needs neither; use `add`, `show`, `push`, and `pull`.
 
-Wayland clipboard watching uses the compositor's data-control protocol on desktops
-such as Sway and Hyprland. Standard Ubuntu GNOME Wayland does not expose that
-protocol to ordinary applications, so `ubuntu-update.sh` installs a small bundled
-GNOME Shell bridge that forwards text to the local RetroPyClip process over the
-private desktop session bus. The first installation may ask for one logout/login to
-load the extension. RetroPyClip never repeatedly polls `wl-paste`, because its
-fallback window can visibly flash on unsupported compositors.
+Wayland watching uses the compositor data-control protocol (Sway, Hyprland).
+Standard Ubuntu GNOME Wayland does not expose that to ordinary apps, so
+`ubuntu-update.sh` installs a small bundled GNOME Shell bridge that forwards
+text over the private desktop session bus. The first install may ask for one
+logout/login. RetroPyClip never repeatedly polls `wl-paste`, because that
+fallback can flash a paste window on unsupported compositors.
 
-After cloning on an Ubuntu desktop, future updates can be installed and the tray
-restarted with:
+After cloning, later updates:
 
 ```bash
 git pull --ff-only
 ./ubuntu-update.sh
 ```
 
-The updater installs a missing X11/Wayland clipboard utility through `apt`, refreshes
-the locked Python environment, runs `doctor`, and restarts only this checkout's tray
-process. Its diagnostic log is stored privately under `~/.local/state/retropyclip/`.
+The updater installs a missing X11/Wayland clipboard utility through `apt`,
+refreshes the locked Python environment, runs `doctor`, and restarts only this
+checkout's tray. Diagnostics live under `~/.local/state/retropyclip/`.
 
-## Quick local use
+</details>
+
+## CLI
 
 ```bash
 retropyclip add "hello"
@@ -113,73 +130,130 @@ retropyclip copy ITEM_ID
 retropyclip daemon
 ```
 
-`daemon` watches the desktop clipboard and records text changes until interrupted.
-It never captures images or files. Use `retropyclip pause --minutes 5` before
-handling known-sensitive material.
-
-## Enable Google Drive sync
-
-Real Drive sync requires an OAuth client that you create in your own Google Cloud
-project. Follow [docs/google-oauth-setup.md](docs/google-oauth-setup.md), then:
+`daemon` watches the desktop clipboard and records **text** changes until
+interrupted. Pause before handling known-sensitive material:
 
 ```bash
-retropyclip login --client-secrets /safe/path/client_secret.json
-retropyclip sync
+retropyclip pause --minutes 5
 ```
 
-The first sync asks for a sync passphrase and creates non-secret Argon2id key
-metadata in `appDataFolder`. Enter the same passphrase on every device. The
-passphrase and derived key are never uploaded. For unattended use, provide the
-passphrase through `RETROPYCLIP_SYNC_PASSPHRASE`; understand that environment
-variables can be exposed to other processes owned by the same user.
+| Command | Purpose |
+|---|---|
+| `add` | Record text from an argument or stdin |
+| `history` | List stored items |
+| `show` / `copy` | Print or copy one item (full ID or unique prefix) |
+| `daemon` | Watch the clipboard |
+| `pause` / `resume` | Stop or start capture |
+| `login` / `logout` / `status` | Drive authentication |
+| `sync` / `push` / `pull` | Encrypted Drive sync |
+| `clear-local` / `clear-everywhere` | Wipe this device, or this device plus remote tombstones |
+| `export` / `import` | JSON or text |
+| `doctor` | Check the local environment |
+| `configure` | Adjust settings |
 
-Run `retropyclip status` for local state and authentication readiness. Downloaded
-clips enter history but never replace the current clipboard automatically.
-
-## Optional tray app
+## Optional tray
 
 ```bash
 uv sync --extra gui
 uv run retropyclip-tray
 ```
 
-The tray menu includes grouped history, Sync Now, pause controls, clearing, and
-preferences. On macOS, `Cmd+Shift+V` opens a compact retro history console from any
-application. Type to filter, use Up/Down to browse, then press Enter or click an item
-to paste the exact plain text back into the application you were using. Escape closes
-the window, and pressing the shortcut again toggles it.
+The tray includes grouped history, Sync Now, pause, clearing, and preferences.
+On macOS, `Cmd+Shift+V` opens the history console from any app: type to filter,
+Up/Down to browse, Enter or click to paste, Escape to close. The shortcut uses
+native hotkey registration.
 
-The shortcut itself uses native macOS hotkey registration and does not need extra
-access. Automatic paste does: the first selection asks for Accessibility permission.
-Open **System Settings → Privacy & Security → Accessibility** and enable
-RetroPyClip. During development, macOS may list it as Python or the terminal app that
-launched it (for example, Warp). If the picker was already running, restart it after
-granting access. A selection is still copied to the clipboard when permission is not
-available, so regular `Cmd+V` remains a fallback.
+<details>
+<summary>macOS Accessibility for automatic paste</summary>
+
+Automatic paste needs Accessibility permission. The first selection prompts;
+enable RetroPyClip under **System Settings → Privacy & Security → Accessibility**.
+During development, macOS may list it as Python or the terminal that launched it
+(for example Warp). Restart the picker after granting access. Without permission,
+the selection is still copied, so `Cmd+V` remains a fallback.
 
 Packaging, signing, notarisation, launch-at-login, configurable shortcuts, and a
-Linux-wide shortcut implementation remain release work rather than prototype claims.
+Linux-wide shortcut are release work, not prototype claims.
 
-## Data locations
+</details>
 
-Platform-standard user data and configuration locations are selected with
-`platformdirs`. For isolated testing, set `RETROPYCLIP_HOME` to a directory. OAuth
-tokens use the OS keyring when available and fall back to a mode-`0600` file.
+## Google Drive sync
 
-Do not commit OAuth client files, token files, databases, logs, or recovery material.
+Create an OAuth client in **your** Google Cloud project
+([setup guide](docs/google-oauth-setup.md)), then:
 
-## Project status
+```bash
+retropyclip login --client-secrets /safe/path/client_secret.json
+retropyclip sync
+```
 
-This repository implements the Stage 1 sync core plus an early Stage 2/3 tray and
-daemon experience. Public-release notes:
+The first sync asks for a passphrase and stores non-secret Argon2id metadata in
+`appDataFolder`. Use the same passphrase on every device. The passphrase and
+derived key are never uploaded.
 
-- Name clearance: [docs/name-clearance.md](docs/name-clearance.md)
-- Secret scan: [docs/secret-scan.md](docs/secret-scan.md)
-- Security review: [docs/security-review.md](docs/security-review.md)
-- Licence audit: [docs/license-audit.md](docs/license-audit.md)
-- Compatibility matrix: [docs/compatibility-matrix.md](docs/compatibility-matrix.md)
-- Real-device checklist: [docs/feasibility-checklist.md](docs/feasibility-checklist.md)
-- Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
-- Contributing / changelog / roadmap: [CONTRIBUTING.md](CONTRIBUTING.md),
-  [CHANGELOG.md](CHANGELOG.md), [docs/roadmap.md](docs/roadmap.md)
-- Safe synthetic demo: `make demo` (isolated `RETROPYCLIP_HOME`, no real OAuth)
+For unattended sync, `RETROPYCLIP_SYNC_PASSPHRASE` is accepted; environment
+variables can be read by other processes owned by the same user.
+
+`retropyclip status` reports local state and auth readiness. Downloaded clips
+enter history and **never** replace the current clipboard automatically.
+
+## Security
+
+| Protected | Not protected against |
+|---|---|
+| Clip plaintext on Drive, given a strong passphrase | Weak passphrases |
+| Authenticated remote records | Drive deletion or replay |
+| Concurrent-device merge and tombstones | Clock skew in display order |
+| Keyring / `0600` token files | Malware in an unlocked user session |
+| Pause and text-only capture | Secrets that look like ordinary text |
+| Isolated demo homes | Local DB without FileVault or LUKS |
+
+There is no operated server and no telemetry ([privacy](docs/privacy.md)).
+Report vulnerabilities privately per [SECURITY.md](SECURITY.md). Never include
+real clipboard contents in issues or reports.
+
+**Data locations.** User data and config use `platformdirs`. For isolated
+testing, set `RETROPYCLIP_HOME`. OAuth tokens use the OS keyring when available,
+otherwise a mode-`0600` file. Do not commit OAuth client files, tokens,
+databases, logs, or recovery material.
+
+## Development
+
+```bash
+uv sync --all-extras
+make check
+make test
+```
+
+| Target | What it runs |
+|---|---|
+| `make check` | Ruff lint/format and mypy |
+| `make test` | pytest with coverage gate |
+| `make package` | Wheel/sdist plus packaging smoke |
+| `make audit` | Licence / dependency audit |
+| `make sbom` | CycloneDX SBOM |
+| `make demo` | Isolated synthetic demo |
+
+Install git hooks with `uvx pre-commit install`. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Documentation
+
+| | |
+|---|---|
+| [Architecture](docs/architecture.md) | Components and data flow |
+| [Threat model](docs/threat-model.md) | What this build does and does not claim |
+| [Crypto](docs/crypto.md) / [key rotation](docs/key-rotation.md) | Envelopes and passphrase wrapping |
+| [Troubleshooting](docs/troubleshooting.md) | Common desktop and sync failures |
+| [Compatibility matrix](docs/compatibility-matrix.md) | Claimed platforms and evidence |
+| [Roadmap](docs/roadmap.md) / [changelog](CHANGELOG.md) | What is next and what changed |
+| [Release](docs/release.md) | How a signed alpha would be cut |
+
+Also: [name clearance](docs/name-clearance.md),
+[secret scan](docs/secret-scan.md),
+[security review](docs/security-review.md),
+[licence audit](docs/license-audit.md),
+[feasibility checklist](docs/feasibility-checklist.md).
+
+## License
+
+[MIT](LICENSE).

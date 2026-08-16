@@ -9,11 +9,12 @@ The first public release is **alpha**. Limitations in the README still apply.
 3. `make audit` and `make package` succeed.
 4. Compatibility matrix rows you claim are filled with synthetic results.
 5. Changelog version and `__version__` match the tag (`v0.1.0`).
-6. Create a GitHub Environment named `release` with required reviewers.
-7. Tag `v0.1.0` or run the Release workflow manually.
-8. Attach SHA-256 checksums, SBOM, and provenance attestations from the workflow.
-9. Keep the GitHub release in **draft** until notes and assets are reviewed.
-10. Do not enable Windows as a supported platform.
+6. Tag `v0.1.0` or run the Release workflow manually. After a GitHub Environment
+   named `release` exists (Settings → Environments), you can point these jobs at
+   it with `environment: release` for reviewer gates and signing secrets.
+7. Attach SHA-256 checksums, SBOM, and provenance attestations from the workflow.
+8. Keep the GitHub release in **draft** until notes and assets are reviewed.
+9. Do not enable Windows as a supported platform.
 
 ## Signing
 
