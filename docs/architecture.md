@@ -3,16 +3,14 @@
 RetroPyClip separates clipboard I/O, local storage, cryptography, remote transport,
 and merge policy so each can be tested independently.
 
-```text
-CLI / tray / daemon
-        |
-clipboard adapter ----> SQLite repository
-                              |
-                    deterministic sync engine
-                       |               |
-                  AES-256-GCM      Drive backend
-                                       |
-                              appDataFolder records
+```mermaid
+flowchart LR
+  UI["CLI / tray / daemon"] --> Adapt["Clipboard adapters"]
+  Adapt --> Repo["SQLite repository"]
+  UI --> Repo
+  Repo --> Engine["Deterministic sync engine"]
+  Engine --> Envelope["AES-256-GCM envelope"]
+  Engine --> Drive["Drive appDataFolder"]
 ```
 
 ## Local model

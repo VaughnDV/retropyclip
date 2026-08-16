@@ -52,7 +52,16 @@ retropyclip-tray = "retropyclip.ui.tray:main"
 packages = ["src/retropyclip"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/retropyclip", "tests", "docs", "README.md", "LICENSE", "SECURITY.md"]
+include = [
+  "src/retropyclip",
+  "tests",
+  "docs",
+  "README.md",
+  "LICENSE",
+  "SECURITY.md",
+  "CONTRIBUTING.md",
+  "CHANGELOG.md",
+]
 
 [tool.pytest.ini_options]
 addopts = "-q --strict-markers --cov=retropyclip --cov-report=term-missing --cov-fail-under=62"

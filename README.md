@@ -14,6 +14,34 @@ There is no RetroPyClip-operated server.
 > or LUKS. Remote Drive records *are* AES-256-GCM encrypted. See
 > [at-rest-encryption.md](docs/at-rest-encryption.md).
 
+![RetroPyClip history console](docs/assets/history-console.png)
+
+Capture, filter, and copy are local. Encrypted sync is optional and uses your Drive
+app-data folder. A 30–60 second recording of `make demo` is the preferred motion
+asset; the screenshot above is synthetic demo data only. The four-step storyboard
+is [docs/assets/demo-flow.svg](docs/assets/demo-flow.svg). Record `make demo` for a
+live 30–60 second GIF before a public launch.
+
+## Architecture
+
+Clipboard adapters, the SQLite repository, the AES-GCM envelope, Drive transport,
+and the CLI/tray are separate. See [docs/architecture.md](docs/architecture.md)
+and the Staff-level note on a [serverless Drive data plane](docs/drive-data-plane.md).
+
+## Security properties / not protected against
+
+| Protected | Not protected against |
+|---|---|
+| Clip plaintext on Drive, given a strong passphrase | Weak passphrases |
+| Authenticated remote records | Drive deletion or replay |
+| Concurrent-device merge and tombstones | Clock skew in display order |
+| Keyring / `0600` token files | Malware in an unlocked user session |
+| Pause and text-only capture | Secrets that look like ordinary text |
+| Isolated demo homes | Local DB without FileVault or LUKS |
+
+Full model: [docs/threat-model.md](docs/threat-model.md). Privacy: there is no
+operated server or telemetry ([docs/privacy.md](docs/privacy.md)).
+
 ## What works in this MVP
 
 - Local text-only clipboard history with deterministic ordering and a configurable
@@ -36,8 +64,12 @@ Python 3.12 or newer and `uv` are recommended:
 cd /path/to/retropyclip
 uv sync --all-extras
 uv run retropyclip doctor
-uv run pytest
+make check
+make test
 ```
+
+`make check`, `make test`, `make package`, `make audit`, and `make demo` wrap the
+same `uv` commands. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 For a smaller headless installation, omit `--all-extras`:
 
@@ -147,3 +179,7 @@ daemon experience. Public-release notes:
 - Licence audit: [docs/license-audit.md](docs/license-audit.md)
 - Compatibility matrix: [docs/compatibility-matrix.md](docs/compatibility-matrix.md)
 - Real-device checklist: [docs/feasibility-checklist.md](docs/feasibility-checklist.md)
+- Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
+- Contributing / changelog / roadmap: [CONTRIBUTING.md](CONTRIBUTING.md),
+  [CHANGELOG.md](CHANGELOG.md), [docs/roadmap.md](docs/roadmap.md)
+- Safe synthetic demo: `make demo` (isolated `RETROPYCLIP_HOME`, no real OAuth)

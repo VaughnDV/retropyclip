@@ -42,6 +42,19 @@ it reconnects. Old ciphertext remains in Drive until a future garbage-collection
 feature deletes files; users requiring immediate physical deletion should remove the
 application's Drive data and local databases on every device.
 
+## Security properties
+
+| Protected | Not protected against |
+|---|---|
+| Clip plaintext on Drive, given a strong passphrase | Weak passphrases (offline guessing) |
+| Integrity of downloaded records (AES-GCM + AAD) | Deletion or replay of Drive files |
+| Merge safety for concurrent devices and tombstones | Clock skew changing presentation order |
+| OAuth tokens in the keyring or a `0600` file | Malware running as the unlocked user |
+| Pause, concealed markers, and text-only capture | Generic secrets that look like ordinary text |
+| Isolated `RETROPYCLIP_HOME` demo profiles | Local SQLite readable on an unlocked disk without FileVault/LUKS |
+
+The design note [drive-data-plane.md](drive-data-plane.md) explains why there is no RetroPyClip server.
+
 ## Before public release
 
 Commission review of cryptographic usage, OAuth token handling, local file
