@@ -21,7 +21,7 @@ classifiers = [
 ]
 dependencies = [
   "argon2-cffi>=23.1,<26",
-  "cryptography>=43,<47",
+  "cryptography>=50.0.0,<51",
   "google-api-python-client>=2.149,<3",
   "google-auth>=2.35,<3",
   "google-auth-oauthlib>=1.2,<2",
