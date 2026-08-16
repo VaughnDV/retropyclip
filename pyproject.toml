@@ -36,6 +36,7 @@ dependencies = [
 [project.optional-dependencies]
 gui = ["PySide6>=6.8,<7"]
 dev = [
+  "hypothesis>=6.112,<7",
   "mypy>=1.13,<2",
   "pytest>=8.3,<10",
   "pytest-cov>=5,<8",
@@ -54,8 +55,27 @@ packages = ["src/retropyclip"]
 include = ["src/retropyclip", "tests", "docs", "README.md", "LICENSE", "SECURITY.md"]
 
 [tool.pytest.ini_options]
-addopts = "-q --strict-markers"
+addopts = "-q --strict-markers --cov=retropyclip --cov-report=term-missing --cov-fail-under=62"
 testpaths = ["tests"]
+markers = [
+  "desktop: GUI smoke tests that use an offscreen Qt platform",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["retropyclip"]
+omit = [
+  "src/retropyclip/ui/tray.py",
+  "src/retropyclip/ui/history_popup.py",
+  "src/retropyclip/ui/macos_hotkey.py",
+  "src/retropyclip/ui/macos_paste.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "if __name__ == .__main__.:",
+]
 
 [tool.ruff]
 target-version = "py312"
@@ -84,5 +104,15 @@ disallow_untyped_calls = false
 warn_return_any = false
 
 [[tool.mypy.overrides]]
-module = ["retropyclip.ui.*"]
+module = [
+  "retropyclip.ui.tray",
+  "retropyclip.ui.history_popup",
+  "retropyclip.ui.macos_hotkey",
+  "retropyclip.ui.gnome_clipboard_bridge",
+]
 ignore_errors = true
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.165.9",
+]

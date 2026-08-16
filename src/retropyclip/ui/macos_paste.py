@@ -23,7 +23,7 @@ class MacOSPasteTarget:
     @classmethod
     def capture(cls) -> MacOSPasteTarget | None:
         try:
-            import AppKit  # type: ignore[import-not-found]
+            import AppKit
         except ImportError:
             return None
 
@@ -36,8 +36,8 @@ class MacOSPasteTarget:
         global _permission_prompt_requested
 
         try:
-            import AppKit  # type: ignore[import-not-found]
-            import ApplicationServices  # type: ignore[import-not-found]
+            import AppKit
+            import ApplicationServices
         except ImportError:
             return PastePreparation.TARGET_UNAVAILABLE
 
@@ -64,7 +64,7 @@ class MacOSPasteTarget:
         """Post Command+V after the destination app has regained focus."""
 
         try:
-            import Quartz  # type: ignore[import-not-found]
+            import Quartz
         except ImportError:
             return
 
