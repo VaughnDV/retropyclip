@@ -5,6 +5,7 @@ import os
 import platform
 import socket
 import uuid
+from contextlib import suppress
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,18 @@ from platformdirs import PlatformDirs
 APP_NAME = "RetroPyClip"
 APP_AUTHOR = "RetroPyClip"
 MAX_CONFIGURABLE_ITEM_BYTES = 1024 * 1024
+
+
+def ensure_private_dir(path: Path) -> None:
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with suppress(OSError):
+        os.chmod(path, 0o700)
+
+
+def ensure_private_file(path: Path, *, mode: int = 0o600) -> None:
+    if path.exists():
+        with suppress(OSError):
+            os.chmod(path, mode)
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +64,11 @@ class AppPaths:
 
     def ensure(self) -> None:
         for directory in (self.config_dir, self.data_dir, self.cache_dir):
-            directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+            ensure_private_dir(directory)
+        ensure_private_file(self.settings_file)
+        ensure_private_file(self.token_file)
+        ensure_private_file(self.client_secrets_file)
+        ensure_private_file(self.database_file)
 
 
 @dataclass(slots=True)

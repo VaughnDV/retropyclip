@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import random
 import time
 from collections.abc import Callable
 from typing import TypeVar
 
 from retropyclip.core.models import OverallSyncState, SyncReport, format_utc, utc_now
 from retropyclip.core.text import InvalidClip, validate_text
+from retropyclip.crypto.diagnostics import sanitize_diagnostic
 from retropyclip.crypto.envelope import (
     KEYINFO_FILENAME,
     CryptoError,
@@ -17,6 +19,7 @@ from retropyclip.crypto.envelope import (
 from retropyclip.storage.sqlite import Repository
 from retropyclip.sync.backend import (
     AuthenticationRequired,
+    QuotaExceeded,
     RemoteBackend,
     RemoteObject,
     TransientBackendError,
@@ -42,6 +45,7 @@ class SyncEngine:
         sync_paused: bool = False,
         attempts: int = 4,
         sleeper: Callable[[float], None] = time.sleep,
+        jitter: Callable[[], float] = random.random,
         kdf_parameters: KDFParameters | None = None,
     ) -> None:
         self.repository = repository
@@ -52,6 +56,7 @@ class SyncEngine:
         self.sync_paused = sync_paused
         self.attempts = attempts
         self.sleeper = sleeper
+        self.jitter = jitter
         self.kdf_parameters = kdf_parameters
 
     def sync(self, passphrase: str) -> SyncReport:
@@ -74,8 +79,12 @@ class SyncEngine:
         except TransientBackendError:
             self._set_state(OverallSyncState.OFFLINE)
             raise
+        except QuotaExceeded as error:
+            self._record_error(error)
+            self._set_state(OverallSyncState.ERROR)
+            raise
         except Exception as error:
-            self.repository.record_sync_error(type(error).__name__, str(error))
+            self._record_error(error)
             self._set_state(OverallSyncState.ERROR)
             raise
 
@@ -94,8 +103,12 @@ class SyncEngine:
         except TransientBackendError:
             self._set_state(OverallSyncState.OFFLINE)
             raise
+        except QuotaExceeded as error:
+            self._record_error(error)
+            self._set_state(OverallSyncState.ERROR)
+            raise
         except Exception as error:
-            self.repository.record_sync_error(type(error).__name__, str(error))
+            self._record_error(error)
             self._set_state(OverallSyncState.ERROR)
             raise
 
@@ -113,8 +126,12 @@ class SyncEngine:
         except TransientBackendError:
             self._set_state(OverallSyncState.OFFLINE)
             raise
+        except QuotaExceeded as error:
+            self._record_error(error)
+            self._set_state(OverallSyncState.ERROR)
+            raise
         except Exception as error:
-            self.repository.record_sync_error(type(error).__name__, str(error))
+            self._record_error(error)
             self._set_state(OverallSyncState.ERROR)
             raise
 
@@ -194,7 +211,9 @@ class SyncEngine:
                 skipped += 1
                 continue
             if item.size is not None and item.size > maximum:
-                message = f"remote object {item.id} exceeds the encrypted size limit"
+                message = sanitize_diagnostic(
+                    f"remote object {item.id} exceeds the encrypted size limit"
+                )
                 self.repository.record_sync_error("OversizedRemoteRecord", message)
                 self.repository.mark_seen(item.id)
                 errors.append(message)
@@ -212,7 +231,9 @@ class SyncEngine:
                 else:
                     skipped += 1
             except (CryptoError, InvalidClip) as error:
-                message = f"remote object {item.id} was rejected: {error}"
+                message = sanitize_diagnostic(
+                    f"remote object {item.id} was rejected: {error}"
+                )
                 self.repository.record_sync_error(type(error).__name__, message)
                 self.repository.mark_seen(item.id)
                 errors.append(message)
@@ -247,9 +268,15 @@ class SyncEngine:
             except TransientBackendError:
                 if attempt + 1 >= self.attempts:
                     raise
-                self.sleeper(delay)
+                spread = 0.5 + self.jitter()
+                self.sleeper(delay * spread)
                 delay = min(delay * 2, 4.0)
         raise AssertionError("retry loop did not return")
+
+    def _record_error(self, error: BaseException) -> None:
+        self.repository.record_sync_error(
+            type(error).__name__, sanitize_diagnostic(str(error))
+        )
 
     def _check_enabled(self) -> None:
         if self.local_only:

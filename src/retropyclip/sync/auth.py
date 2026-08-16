@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -20,7 +21,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from keyring.errors import KeyringError
 
-from retropyclip.config import AppPaths
+from retropyclip.config import AppPaths, ensure_private_dir
 from retropyclip.sync.backend import AuthenticationRequired, TransientBackendError
 
 SCOPES = ["https://www.googleapis.com/auth/drive.appdata"]
@@ -34,16 +35,25 @@ class CredentialStore:
     def __init__(self, paths: AppPaths) -> None:
         self.paths = paths
 
+    def _keyring_account(self) -> str:
+        override = os.environ.get("RETROPYCLIP_HOME")
+        if not override:
+            return KEYRING_ACCOUNT
+        digest = hashlib.sha256(str(self.paths.config_dir.resolve()).encode("utf-8")).hexdigest()[
+            :16
+        ]
+        return f"{KEYRING_ACCOUNT}:{digest}"
+
     def save(self, credentials: Credentials) -> None:
         raw = credentials.to_json()
         try:
-            keyring.set_password(KEYRING_SERVICE, KEYRING_ACCOUNT, raw)
+            keyring.set_password(KEYRING_SERVICE, self._keyring_account(), raw)
             if self.paths.token_file.exists():
                 self.paths.token_file.unlink()
             return
         except KeyringError:
             pass
-        self.paths.config_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        ensure_private_dir(self.paths.config_dir)
         temporary = self.paths.token_file.with_suffix(".tmp")
         temporary.write_text(raw, "utf-8")
         os.chmod(temporary, 0o600)
@@ -52,7 +62,7 @@ class CredentialStore:
     def load(self, *, refresh: bool = True) -> Credentials | None:
         raw: str | None = None
         with suppress(KeyringError):
-            raw = keyring.get_password(KEYRING_SERVICE, KEYRING_ACCOUNT)
+            raw = keyring.get_password(KEYRING_SERVICE, self._keyring_account())
         if raw is None and self.paths.token_file.exists():
             raw = self.paths.token_file.read_text("utf-8")
         if raw is None:
@@ -75,7 +85,7 @@ class CredentialStore:
 
     def delete(self) -> None:
         with suppress(KeyringError, keyring.errors.PasswordDeleteError):
-            keyring.delete_password(KEYRING_SERVICE, KEYRING_ACCOUNT)
+            keyring.delete_password(KEYRING_SERVICE, self._keyring_account())
         if self.paths.token_file.exists():
             self.paths.token_file.unlink()
 
@@ -96,7 +106,7 @@ def install_client_secrets(source: Path, paths: AppPaths) -> Path:
         raise ValueError("OAuth client file is not valid JSON") from error
     if not isinstance(payload, dict) or not ({"installed", "web"} & set(payload)):
         raise ValueError("OAuth client file must contain an installed or web client")
-    paths.config_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    ensure_private_dir(paths.config_dir)
     if source != paths.client_secrets_file:
         shutil.copyfile(source, paths.client_secrets_file)
     os.chmod(paths.client_secrets_file, 0o600)

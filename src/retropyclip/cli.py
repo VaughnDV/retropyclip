@@ -15,6 +15,7 @@ from retropyclip import __version__
 from retropyclip.config import MAX_CONFIGURABLE_ITEM_BYTES
 from retropyclip.core.models import SyncReport, format_utc
 from retropyclip.core.text import InvalidClip, one_line_preview
+from retropyclip.crypto.diagnostics import sanitize_diagnostic
 from retropyclip.crypto.envelope import CryptoError, InvalidPassphrase
 from retropyclip.platforms.clipboard import (
     ClipboardMonitor,
@@ -82,7 +83,7 @@ def _perform_sync(action: Literal["push", "pull", "sync"]) -> SyncReport:
             return engine.pull(passphrase)
         return engine.sync(passphrase)
     except (AuthenticationRequired, BackendError, CryptoError, SyncDisabled) as error:
-        typer.echo(f"Sync failed: {error}", err=True)
+        typer.echo(f"Sync failed: {sanitize_diagnostic(str(error))}", err=True)
         raise typer.Exit(1) from error
 
 
@@ -362,7 +363,14 @@ def clear_everywhere(
         device_id=runtime.settings.device_id,
         device_name=runtime.settings.device_name,
     )
-    typer.echo(f"Queued {count} tombstone(s). Run 'retropyclip sync' on every device.")
+    runtime.settings.capture_paused = True
+    runtime.settings.pause_until = None
+    runtime.config.save(runtime.settings)
+    typer.echo(
+        f"Queued {count} tombstone(s). Capture is paused so leftover clipboard "
+        "text is not recaptured. Run 'retropyclip resume', then 'retropyclip sync' "
+        "on every device."
+    )
 
 
 @app.command("export")
@@ -439,6 +447,15 @@ def doctor() -> None:
             oct(runtime.paths.database_file.stat().st_mode & 0o777),
         )
     )
+    for label, path in (
+        ("Config directory", runtime.paths.config_dir),
+        ("Data directory", runtime.paths.data_dir),
+    ):
+        mode = path.stat().st_mode & 0o777
+        checks.append((f"{label} permissions", not bool(mode & 0o077), oct(mode)))
+    if runtime.paths.token_file.exists():
+        mode = runtime.paths.token_file.stat().st_mode & 0o777
+        checks.append(("Token fallback permissions", not bool(mode & 0o077), oct(mode)))
     caps = capabilities()
     desktop_expected = caps.session != "headless"
     checks.append(

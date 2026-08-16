@@ -16,7 +16,7 @@ No high-risk cryptographic defect was found in this design. Residual risks are w
 
 - OAuth is limited to `drive.appdata`.
 - Tokens prefer the OS keyring and fall back to a mode-`0600` file under the private config directory.
-- Isolated `RETROPYCLIP_HOME` profiles must not inherit the operator's real Google token from the login keyring. That isolation gap is recorded below and closed in credential-store hardening.
+- Isolated `RETROPYCLIP_HOME` profiles use a path-scoped keyring account so a demo home cannot read the operator's real Google token.
 
 ## File permissions
 
@@ -46,12 +46,12 @@ Application-level encryption of the local SQLite history is **not** implemented 
 
 ## Findings
 
-| Severity | Item | Handling |
+| Severity | Item | Status |
 |---|---|---|
-| Medium | Isolated `RETROPYCLIP_HOME` could inherit the operator keyring token | Tracked for credential-store hardening |
-| Medium | Tray Sync Now stayed enabled while `sync_paused` | Tracked for desktop-boundary hardening |
-| Low | `mkdir(..., exist_ok=True)` does not tighten already-too-open directories | Tracked for permission hardening |
-| Low | Sync error strings include exception text from remote parsing | Tracked for diagnostic sanitisation |
+| Medium | Isolated `RETROPYCLIP_HOME` could inherit the operator keyring token | Fixed: path-scoped keyring account |
+| Medium | Tray Sync Now stayed enabled while `sync_paused` | Fixed: tray and engine both refuse |
+| Low | `mkdir(..., exist_ok=True)` does not tighten already-too-open directories | Fixed: `ensure_private_dir` |
+| Low | Sync error strings include exception text from remote parsing | Fixed: `sanitize_diagnostic` |
 | Info | Python cannot reliably zeroise passphrases or AES keys | Documented; not claimed |
 
-No high-risk cryptographic or sync-merge defects were found. The medium items above are endpoint-isolation gaps, not Drive ciphertext failures. Commission an independent review before a non-alpha public release if the threat model grows (App Store distribution, Windows, or hosted components).
+No unresolved high-risk findings remain in this review. Commission an independent review before a non-alpha public release if the threat model grows (App Store distribution, Windows, or hosted components).

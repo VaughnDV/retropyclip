@@ -118,7 +118,11 @@ class TrayController(QObject):
         if isinstance(self.native_clipboard, WaylandClipboard):
             desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
             if "gnome" in desktop:
-                bridge = GnomeClipboardBridge(self._capture_text, self)
+                bridge = GnomeClipboardBridge(
+                    self._capture_text,
+                    self,
+                    max_item_bytes=self.runtime.settings.max_item_bytes,
+                )
                 if bridge.available:
                     self.gnome_clipboard_bridge = bridge
             else:
@@ -212,7 +216,11 @@ class TrayController(QObject):
         self.menu.addSeparator()
 
         sync_now = self.menu.addAction("Sync Now")
-        sync_now.setEnabled(self.sync_future is None and not self.runtime.settings.local_only)
+        sync_now.setEnabled(
+            self.sync_future is None
+            and not self.runtime.settings.local_only
+            and not self.runtime.settings.sync_paused
+        )
         sync_now.triggered.connect(self._start_sync)
 
         pause_capture = self.menu.addAction("Pause Capture")
@@ -363,6 +371,14 @@ class TrayController(QObject):
         self.history_popup.show_browser(records)
 
     def _start_sync(self) -> None:
+        settings = self.runtime.reload_settings()
+        if settings.local_only or settings.sync_paused:
+            QMessageBox.warning(
+                None,
+                "Sync paused",
+                "Synchronization is paused or local-only. Resume sync before uploading.",
+            )
+            return
         passphrase, accepted = QInputDialog.getText(
             None,
             "RetroPyClip Sync",
@@ -461,10 +477,14 @@ class TrayController(QObject):
             device_id=self.runtime.settings.device_id,
             device_name=self.runtime.settings.device_name,
         )
+        self.runtime.settings.capture_paused = True
+        self.runtime.settings.pause_until = None
+        self.runtime.config.save(self.runtime.settings)
         QMessageBox.information(
             None,
             "Deletion queued",
-            f"Queued {count} tombstone(s). Use Sync Now, then sync every other device.",
+            f"Queued {count} tombstone(s). Capture is paused so leftover clipboard "
+            "text is not recaptured. Use Sync Now, then sync every other device.",
         )
         self.rebuild_menu()
 

@@ -54,6 +54,11 @@ def test_gnome_bridge_exports_capture_method_and_cleans_up() -> None:
     bridge.capture_text("copied through GNOME")
     assert captured == ["copied through GNOME"]
 
+    bridge.capture_text("")
+    bridge.capture_text("nul\x00inside")
+    bridge.capture_text("x" * (1024 * 1024 + 1))
+    assert captured == ["copied through GNOME"]
+
     bridge.close()
     assert not bridge.available
     assert bus.unregistered_object == OBJECT_PATH

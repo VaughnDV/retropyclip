@@ -70,6 +70,8 @@ class MacOSClipboard(ClipboardAdapter):
         if self._appkit is None:
             return False
         pasteboard = self._appkit.NSPasteboard.generalPasteboard()
+        if pasteboard is None:
+            return False
         types = {str(value) for value in (pasteboard.types() or [])}
         concealed = {
             "org.nspasteboard.ConcealedType",

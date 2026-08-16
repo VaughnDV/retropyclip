@@ -59,3 +59,44 @@ def test_pause_and_resume(tmp_path: Path, monkeypatch) -> None:  # type: ignore[
     monkeypatch.setenv("RETROPYCLIP_HOME", str(tmp_path / "home"))
     assert runner.invoke(app, ["pause", "--minutes", "5"]).exit_code == 0
     assert runner.invoke(app, ["resume"]).exit_code == 0
+
+
+def test_pause_survives_process_restart(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("RETROPYCLIP_HOME", str(tmp_path / "home"))
+    assert runner.invoke(app, ["pause"]).exit_code == 0
+    from retropyclip.runtime import Runtime
+
+    restarted = Runtime.open()
+    assert restarted.capture_enabled() is False
+    assert runner.invoke(app, ["resume"]).exit_code == 0
+    assert Runtime.open().capture_enabled() is True
+
+
+def test_clear_everywhere_pauses_capture(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("RETROPYCLIP_HOME", str(tmp_path / "home"))
+    runner.invoke(app, ["add", "wipe me"])
+    cleared = runner.invoke(app, ["clear-everywhere", "--confirm", "CLEAR EVERYWHERE"])
+    assert cleared.exit_code == 0
+    assert "Capture is paused" in cleared.output
+    status = runner.invoke(app, ["status"])
+    assert "paused" in status.output
+
+
+def test_copy_does_not_create_a_duplicate(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("RETROPYCLIP_HOME", str(tmp_path / "home"))
+    added = runner.invoke(app, ["add", "keep-once"])
+    item_id = added.output.strip()
+    runner.invoke(app, ["add", "other"])
+    from retropyclip.runtime import Runtime
+
+    runtime = Runtime.open()
+    runtime.repository.set_clipboard_suppression("keep-once")
+    _, created = runtime.repository.create_local_clip(
+        "keep-once",
+        device_id=runtime.settings.device_id,
+        device_name=runtime.settings.device_name,
+        max_bytes=runtime.settings.max_item_bytes,
+        history_limit=runtime.settings.history_limit,
+    )
+    assert created is False
+    assert runtime.repository.resolve(item_id) is not None

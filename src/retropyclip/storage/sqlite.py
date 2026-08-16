@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from retropyclip.config import ensure_private_dir, ensure_private_file
 from retropyclip.core.models import (
     Record,
     RecordKind,
@@ -20,6 +20,7 @@ from retropyclip.core.models import (
     uuid7,
 )
 from retropyclip.core.text import local_content_hash, validate_text
+from retropyclip.crypto.diagnostics import sanitize_diagnostic
 
 SCHEMA_VERSION = 1
 
@@ -27,8 +28,9 @@ SCHEMA_VERSION = 1
 class Repository:
     def __init__(self, database: Path) -> None:
         self.database = database
-        database.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        ensure_private_dir(database.parent)
         self._initialize()
+        self._protect_database_files()
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database, timeout=10)
@@ -92,8 +94,7 @@ class Repository:
                     PRAGMA user_version = 1;
                     """
                 )
-        with suppress(OSError):
-            os.chmod(self.database, 0o600)
+        self._protect_database_files()
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -102,11 +103,17 @@ class Repository:
             connection.execute("BEGIN IMMEDIATE")
             yield connection
             connection.commit()
+            self._protect_database_files()
         except Exception:
             connection.rollback()
             raise
         finally:
             connection.close()
+
+    def _protect_database_files(self) -> None:
+        ensure_private_file(self.database)
+        for suffix in ("-wal", "-shm", "-journal"):
+            ensure_private_file(Path(str(self.database) + suffix))
 
     @staticmethod
     def _next_sequence(connection: sqlite3.Connection) -> int:
@@ -439,7 +446,7 @@ class Repository:
             connection.execute("DELETE FROM meta WHERE key = ?", (key,))
 
     def record_sync_error(self, code: str, message: str) -> None:
-        safe = message.replace("\n", " ")[:500]
+        safe = sanitize_diagnostic(message)
         with self.transaction() as connection:
             connection.execute(
                 "INSERT INTO sync_errors(occurred_at, code, message) VALUES (?, ?, ?)",

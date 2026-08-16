@@ -19,6 +19,8 @@ def validate_text(text: str, max_bytes: int) -> str:
     normalized = normalize_text(text)
     if not normalized:
         raise InvalidClip("empty clipboard text is not stored")
+    if "\x00" in normalized:
+        raise InvalidClip("clipboard text containing NUL bytes is not stored")
     size = len(normalized.encode("utf-8"))
     if size > max_bytes:
         raise InvalidClip(f"clipboard text is {size} bytes; limit is {max_bytes} bytes")

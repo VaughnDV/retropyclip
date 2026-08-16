@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -17,6 +18,10 @@ class AuthenticationRequired(BackendError):
 
 
 class TransientBackendError(BackendError):
+    pass
+
+
+class QuotaExceeded(BackendError):
     pass
 
 
@@ -112,11 +117,33 @@ class DriveBackend:
 
 def _translate_http_error(error: HttpError) -> BackendError:
     status = int(getattr(error.resp, "status", 0))
+    reason = _drive_error_reason(error)
+    if reason in {"storageQuotaExceeded", "quotaExceeded"} or status == 413:
+        return QuotaExceeded("Google Drive storage quota is exhausted")
     if status in {401, 403}:
         return AuthenticationRequired("Google authorization is missing or no longer valid")
     if status in {408, 409, 429} or 500 <= status <= 599:
         return TransientBackendError(f"temporary Google Drive error ({status})")
     return BackendError(f"Google Drive request failed ({status or 'unknown status'})")
+
+
+def _drive_error_reason(error: HttpError) -> str:
+    content = getattr(error, "content", None)
+    if not content:
+        return ""
+    try:
+        payload = json.loads(content if isinstance(content, str) else content.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    details = payload.get("error")
+    if isinstance(details, dict):
+        errors = details.get("errors")
+        if isinstance(errors, list) and errors and isinstance(errors[0], dict):
+            return str(errors[0].get("reason") or "")
+        return str(details.get("status") or details.get("reason") or "")
+    return ""
 
 
 class MemoryBackend:

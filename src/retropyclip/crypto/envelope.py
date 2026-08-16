@@ -165,7 +165,7 @@ class EnvelopeCipher:
         self._key = key
         self._aes = AESGCM(key)
 
-    def encrypt(self, record: Record) -> bytes:
+    def encrypt(self, record: Record, *, nonce: bytes | None = None) -> bytes:
         keyed_hash: str | None = None
         if record.kind is RecordKind.CLIP:
             assert record.text is not None
@@ -176,14 +176,16 @@ class EnvelopeCipher:
         plaintext = json.dumps(
             payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
-        nonce = os.urandom(12)
+        selected_nonce = os.urandom(12) if nonce is None else nonce
+        if len(selected_nonce) != 12:
+            raise CryptoError("AES-GCM nonce must be 12 bytes")
         associated = self._associated_data(record.id, record.kind)
-        ciphertext = self._aes.encrypt(nonce, plaintext, associated)
+        ciphertext = self._aes.encrypt(selected_nonce, plaintext, associated)
         envelope = {
             "schema": ENVELOPE_SCHEMA,
             "id": record.id,
             "kind": record.kind.value,
-            "nonce": _b64encode(nonce),
+            "nonce": _b64encode(selected_nonce),
             "ciphertext": _b64encode(ciphertext),
         }
         return (json.dumps(envelope, sort_keys=True, separators=(",", ":")) + "\n").encode()

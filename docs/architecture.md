@@ -37,7 +37,8 @@ immediately hidden.
 The only non-record object is `retropyclip.keyinfo.v1.json`. It contains the random
 Argon2id salt, work parameters, and a keyed verifier. These are not secret. The
 passphrase and derived AES key stay local. Initial key metadata should be established
-on the first device before another device attempts its first sync.
+on the first device before another device attempts its first sync. The envelope,
+associated-data, and nonce rules are specified in [crypto.md](crypto.md).
 
 ## Sync algorithm
 
@@ -48,5 +49,11 @@ on the first device before another device attempts its first sync.
 5. Apply local retention and report the final state.
 
 Pull-before-push lets a joining device adopt the established KDF configuration.
-Operations retry transient failures with bounded exponential backoff. Downloading a
-clip never changes the active system clipboard.
+Operations retry transient failures with bounded exponential backoff and jitter.
+Exhausted retries surface as `offline`. Quota exhaustion and authentication failure
+are terminal states (`error` / `authentication_required`) and are not retried.
+Downloading a clip never changes the active system clipboard.
+
+Copying an old history item suppresses the next recapture of that exact text. It
+does not insert a duplicate and does not refresh `captured_at`. See
+[desktop-permissions.md](desktop-permissions.md).
